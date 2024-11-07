@@ -92,8 +92,18 @@ struct thread {
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 
+	int original_priority;				// 기부 전 우선순위
+
+
 	/* Shared between thread.c and synch.c. */
-	struct list_elem elem;              /* List element. */
+	struct list_elem elem;              /* `ready_list`와 `sleep_list`에서 사용할 리스트 요소 */
+
+	struct list_elem donation_elem;     /* List element. */
+
+
+	struct lock *waiting_for;			// 스레드가 기다리고 있는 잠금(NULL일 수 있음)
+	struct list donations;				// 기부된 우선순위 리스트
+
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -107,7 +117,15 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+
+
+
+	/*   수환 PintOS 코드   */
+	int64_t wakeup;
+
 };
+
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -142,5 +160,17 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+
+/* 수환 PintOS 코드 */
+void thread_sleep(int64_t ticks);
+void thread_awake(int64_t ticks);
+
+void thread_test_preemption(void);
+
+bool thread_compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+void donate_priority(void);
+void remove_with_lock(struct lock *lock);
+void refresh_priority(void);
 
 #endif /* threads/thread.h */

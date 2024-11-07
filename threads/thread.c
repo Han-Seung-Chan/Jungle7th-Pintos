@@ -228,7 +228,7 @@ tid_t thread_create(const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock(t);
-
+	thread_test_preemption();
 	return tid;
 }
 
@@ -270,7 +270,8 @@ void thread_unblock(struct thread *t)
 
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
-	list_push_back(&ready_list, &t->elem);
+	// list_push_back(&ready_list, &t->elem); // ready_list 에 스레드 추가
+	list_insert_ordered(&ready_list, &t->elem, thread_compare_priority, 0);
 	t->status = THREAD_READY;
 	intr_set_level(old_level);
 }
@@ -336,14 +337,16 @@ void thread_yield(void)
 - 현재 쓰레드를 ready_list에 추가하고 다른 쓰레드로 전환
 */
 {
-	struct thread *curr = thread_current();
+	struct thread *cur = thread_current();
 	enum intr_level old_level;
 
 	ASSERT(!intr_context());
 
 	old_level = intr_disable();
-	if (curr != idle_thread)
-		list_push_back(&ready_list, &curr->elem);
+	if (cur != idle_thread)
+		// list_push_back(&ready_list, &cur->elem); // ready_list 에 스레드 추가
+		list_insert_ordered(&ready_list, &cur->elem, thread_compare_priority, 0);
+
 	do_schedule(THREAD_READY);
 	intr_set_level(old_level);
 }
@@ -355,6 +358,7 @@ void thread_set_priority(int new_priority)
 */
 {
 	thread_current()->priority = new_priority;
+	thread_test_preemption();
 }
 
 /* Returns the current thread's priority. */
@@ -444,6 +448,38 @@ void thread_awake(int64_t ticks)
 		else
 			e = list_next(e); // 다음 원소로 이동
 	}
+}
+
+/*
+내림차순으로 정렬
+새로운 쓰레드의 우선순위가 ready_list에 있는 리스트의 쓰레드 priority(우선순위)보다 높으면 삽입
+ */
+bool thread_compare_priority(struct list_elem *new_elem, struct list_elem *old_elem, void *aux UNUSED)
+{
+	struct thread *new_thread = list_entry(new_elem, struct thread, elem);
+	struct thread *old_thread = list_entry(old_elem, struct thread, elem);
+
+	if (new_thread == NULL || old_thread == NULL)
+		return false;
+
+	return new_thread->priority > old_thread->priority;
+}
+
+/*
+running thread(현재 동작하는 쓰레드)와 ready_list 의 가장 앞의 쓰레드의 priority(우선순위)를 비교
+*/
+void thread_test_preemption(void)
+{
+	// ready_list가 비어있으면 선점 검사할 필요 없음
+	if (list_empty(&ready_list))
+		return;
+
+	// 현재 실행중인 스레드와 ready_list의 최상위 스레드의 우선순위 비교를 위한 변수
+	struct thread *cur = thread_current();
+	struct thread *highest_ready = list_entry(list_front(&ready_list), struct thread, elem);
+
+	if (cur->priority < highest_ready->priority)
+		thread_yield();
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -662,25 +698,25 @@ schedule(void)
 - 현재 실행 중인 쓰레드의 상태 변경
 */
 {
-	struct thread *curr = running_thread();
-	struct thread *next = next_thread_to_run();
+	struct thread *curr = running_thread();			// 현재 실행 중인 스레드 정보
+	struct thread *next = next_thread_to_run(); // ready_list에서 다음에 실행할 스레드 선택
 
-	ASSERT(intr_get_level() == INTR_OFF);		// scheduling 도중에는 인터럽트가 발생하면 안 되기 때문에 INTR_OFF 상태인지 확인한다.
+	ASSERT(intr_get_level() == INTR_OFF);		// scheduling 도중에는 인터럽트가 발생하면 안 되기 때문에 비활성화 상태인지 확인한다.
 	ASSERT(curr->status != THREAD_RUNNING); // CPU 소유권을 넘겨주기 전에 running 쓰레드는 그 상태를 running 외의 다른 상태로 바꾸어 주는 작업이 되어 있어야 하고 이를 학인하는 부분이다.
-	ASSERT(is_thread(next));								// next_thread_to_run()에 의해 올바른 thread가 return 되었는지 확인한다
+	ASSERT(is_thread(next));								// 다음 실행할 스레드가 유효한 스레드인지 확인ㅍ
 
 	/* Mark us as running. */
-	next->status = THREAD_RUNNING;
+	next->status = THREAD_RUNNING; // 다음 스레드의 상태를 RUNNING으로 변경
 
 	/* Start new time slice. */
-	thread_ticks = 0;
+	thread_ticks = 0; // 새로운 타임 슬라이스 시작을 위해 틱 카운트 초기화
 
 #ifdef USERPROG
 	/* Activate the new address space. */
 	process_activate(next);
 #endif
 
-	if (curr != next)
+	if (curr != next) // 현재 스레드와 다음 스레드가 다른 경우
 	{
 		/* If the thread we switched from is dying, destroy its struct
 			thread. This must happen late so that thread_exit() doesn't

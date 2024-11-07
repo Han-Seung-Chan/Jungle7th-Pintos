@@ -138,6 +138,8 @@ void thread_yield(void);
 // 새로운 함수 정의
 void thread_sleep(int64_t ticks);
 void thread_awake(int64_t ticks);
+bool thread_compare_priority(struct list_elem *new_elem, struct list_elem *old_elem, void *aux UNUSED);
+void thread_test_preemption(void);
 
 int thread_get_priority(void);
 void thread_set_priority(int);

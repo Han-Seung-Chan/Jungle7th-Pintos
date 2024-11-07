@@ -51,6 +51,33 @@ void sema_init(struct semaphore *sema, unsigned value)
 }
 
 /*
+세마포어에서 "up" 또는 "V" 연산.  세마 값을 증가시키고 세마 대기 중인 스레드 중 하나(있는 경우)를 깨웁니다.	 이 함수는 인터럽트 핸들러에서 호출할 수 있습니다.
+*/
+void sema_up(struct semaphore *sema)
+/*
+- V 연산을 수행하는 함수
+- 세마포어 값을 증가시키고, waiters 리스트에서 대기중인 스레드 하나를 깨움
+- 인터럽트 핸들러에서 호출 가능
+*/
+{
+	enum intr_level old_level;
+
+	ASSERT(sema != NULL);
+
+	old_level = intr_disable();
+	if (!list_empty(&sema->waiters))
+	{
+
+		list_sort(&sema->waiters, thread_compare_priority, 0); //
+		thread_unblock(list_entry(list_pop_front(&sema->waiters),
+															struct thread, elem));
+	}
+	sema->value++;
+	thread_test_max_priority();
+	intr_set_level(old_level);
+}
+
+/*
 세마포어에서 "down" 또는 "P" 연산.  SEMA 값이 양수가 될 때까지 기다렸다가 원자적으로 감소시킵니다.
 이 함수는 절전 상태가 될 수 있으므로 인터럽트 핸들러 내에서 호출해서는 안 됩니다. 이 함수는 인터럽트가 비활성화된 상태에서 호출할 수 있지만, 잠자기 상태가 되면 다음 예약된 스레드가 인터럽트를 다시 켜게 될 수 있습니다.
 */
@@ -70,7 +97,8 @@ void sema_down(struct semaphore *sema)
 	old_level = intr_disable();
 	while (sema->value == 0)
 	{
-		list_push_back(&sema->waiters, &thread_current()->elem);
+		// list_push_back(&sema->waiters, &thread_current()->elem);
+		list_insert_ordered(&sema->waiters, &thread_current()->elem, thread_compare_priority, 0); // 우선순위에 맞춰서 넣어주기
 		thread_block();
 	}
 	sema->value--;
@@ -105,28 +133,6 @@ bool sema_try_down(struct semaphore *sema)
 	intr_set_level(old_level);
 
 	return success;
-}
-
-/*
-세마포어에서 "up" 또는 "V" 연산.  세마 값을 증가시키고 세마 대기 중인 스레드 중 하나(있는 경우)를 깨웁니다.	 이 함수는 인터럽트 핸들러에서 호출할 수 있습니다.
-*/
-void sema_up(struct semaphore *sema)
-/*
-- V 연산을 수행하는 함수
-- 세마포어 값을 증가시키고, waiters 리스트에서 대기중인 스레드 하나를 깨움
-- 인터럽트 핸들러에서 호출 가능
-*/
-{
-	enum intr_level old_level;
-
-	ASSERT(sema != NULL);
-
-	old_level = intr_disable();
-	if (!list_empty(&sema->waiters))
-		thread_unblock(list_entry(list_pop_front(&sema->waiters),
-															struct thread, elem));
-	sema->value++;
-	intr_set_level(old_level);
 }
 
 static void sema_test_helper(void *sema_);
@@ -165,15 +171,15 @@ static void sema_test_helper(void *sema_)
 }
 
 /*
-LOCK을 초기화합니다. 잠금은 주어진 시간에 최대 하나의 스레드만 보유할 수 있습니다. 즉, 현재 잠금을 보유하고 있는 스레드가 해당 잠금을 획득하려고 시도하는 것은 오류입니다.
-잠금은 초기값이 1인 세마포어의 특수화입니다. 잠금과 이러한 세마포어의 차이점은 두 가지입니다.첫째, 세마포어는 1보다 큰 값을 가질 수 있지만, 잠금은 한 번에 하나의 스레드만 소유할 수 있습니다.
-둘째, 세마포어는 소유자가 없으므로 한 스레드가 세마포어를 'down'한 다음 다른 스레드가 'up'할 수 있지만, 잠금을 사용하면 동일한 스레드가 모두 잠금을 획득하고 해제해야 합니다. 이러한 제한이 부담스러울 때는 잠금 대신 세마포어를 사용해야 한다는 좋은 신호입니다.
+LOCK을 초기화합니다. 락은 어느 한 시점에 최대 하나의 스레드만이 보유할 수 있습니다. 우리의 락은 '재귀적'이지 않습니다. 즉, 현재 락을 보유하고 있는 스레드가 동일한 락을 다시 획득하려고 하는 것은 오류입니다.
+락은 초기값이 1인 세마포어의 특수한 형태입니다. 락과 이러한 세마포어의 차이점은 두 가지입니다. 첫째, 세마포어는 1보다 큰 값을 가질 수 있지만, 락은 한 번에 단 하나의 스레드만이 소유할 수 있습니다. 둘째, 세마포어는 소유자가 없습니다. 이는 한 스레드가 세마포어를 'down'하고 다른 스레드가 'up'할 수 있다는 것을 의미합니다. 하지만 락의 경우에는 동일한 스레드가 반드시 획득과 해제를 모두 수행해야 합니다. 이러한 제약조건들이 부담스러울 때는 락 대신 세마포어를 사용해야 한다는 좋은 신호입니다.
 */
 void lock_init(struct lock *lock)
 /*
 - 락을 초기화하는 함수
-- holder는 NULL로, 내부 세마포어는 1로 초기화
-- 락은 value가 1인 세마포어의 특수한 형태
+- 단일 스레드만 보유 가능
+- 동일 스레드가 획득/해제 담당
+- 락은 sema value가 1인 세마포어의 특수한 형태 -> 뮤텍스 락을 구현
 */
 {
 	ASSERT(lock != NULL);
@@ -183,13 +189,13 @@ void lock_init(struct lock *lock)
 }
 
 /*
-잠금을 획득하고 필요한 경우 잠금을 사용할 수 있을 때까지 대기합니다. 현재 스레드가 이미 잠금을 잡고 있지 않아야 합니다.
-이 함수는 잠자기 상태일 수 있으므로 인터럽트 핸들러 내에서 호출해서는 안 됩니다. 이 함수는 인터럽트가 비활성화된 상태에서 호출할 수 있지만, 잠자기 모드가 필요한 경우 인터럽트가 다시 켜집니다.
+LOCK을 획득하며, 필요한 경우 락이 사용 가능해질 때까지 대기(sleep)합니다. 이 락은 현재 스레드에 의해 이미 보유되고 있으면 안됩니다.
+이 함수는 대기(sleep) 상태가 될 수 있으므로 인터럽트 핸들러 내에서 호출되어서는 안 됩니다. 이 함수는 인터럽트가 비활성화된 상태에서 호출될 수 있지만, 대기(sleep)가 필요한 경우 인터럽트는 다시 활성화됩니다.
 */
 void lock_acquire(struct lock *lock)
 /*
 - 락을 획득하는 함수
-- 내부적으로 sema_down을 호출
+- 한 스레드가 같은 락을 중복 획득할 수 없음
 - 락 획득 후 현재 스레드를 holder로 설정
 - 인터럽트 핸들러 내에서 호출 불가
 */
@@ -256,37 +262,36 @@ struct semaphore_elem
 	struct semaphore semaphore; /* This semaphore. */
 };
 
-/* Initializes condition variable COND.  A condition variable
-	allows one piece of code to signal a condition and cooperating
-	 code to receive the signal and act upon it. */
+/*
+조건 변수 COND를 초기화합니다. 조건 변수는 코드의 한 부분이 특정 조건을 신호로 보내고, 협력하는 코드가 그 신호를 받아서 그에 따라 동작할 수 있게 해줍니다.
+*/
 void cond_init(struct condition *cond)
+/*
+- 스레드 간 동기화와 통신을 위한 메커니즘
+- 특정 조건의 발생을 다른 스레드에게 알리는 용도
+*/
 {
 	ASSERT(cond != NULL);
 
 	list_init(&cond->waiters);
 }
 
-/* Atomically releases LOCK and waits for COND to be signaled by
-	some other piece of code.  After COND is signaled, LOCK is
-	reacquired before returning.  LOCK must be held before calling
-	this function.
+/*
+LOCK을 원자적으로 해제하고 다른 코드에 의해 COND가 신호를 받을 때까지 대기합니다. COND에 신호가 오면, 리턴하기 전에 LOCK을 다시 획득합니다. 이 함수를 호출하기 전에 반드시 LOCK을 보유하고 있어야 합니다.
 
-	The monitor implemented by this function is "Mesa" style, not
-	"Hoare" style, that is, sending and receiving a signal are not
-	an atomic operation.  Thus, typically the caller must recheck
-	the condition after the wait completes and, if necessary, wait
-	again.
+이 함수로 구현된 모니터는 'Hoare' 스타일이 아닌 'Mesa' 스타일입니다. 즉, 신호를 보내고 받는 것이 원자적 연산이 아닙니다. 따라서, 일반적으로 호출자는 대기가 완료된 후 조건을 다시 확인해야 하며, 필요한 경우 다시 대기해야 합니다.
 
-	A given condition variable is associated with only a single
-	lock, but one lock may be associated with any number of
-	condition variables.  That is, there is a one-to-many mapping
-	from locks to condition variables.
+하나의 조건 변수는 단 하나의 락과만 연관됩니다. 하지만 하나의 락은 여러 개의 조건 변수와 연관될 수 있습니다. 즉, 락에서 조건 변수로의 일대다 매핑이 존재합니다.
 
-	This function may sleep, so it must not be called within an
-	interrupt handler.  This function may be called with
-	interrupts disabled, but interrupts will be turned back on if
-	 we need to sleep. */
+이 함수는 대기(sleep) 상태가 될 수 있으므로 인터럽트 핸들러 내에서 호출되어서는 안 됩니다. 이 함수는 인터럽트가 비활성화된 상태에서 호출될 수 있지만, 대기가 필요한 경우 인터럽트는 다시 활성화됩니다.
+ */
 void cond_wait(struct condition *cond, struct lock *lock)
+/*
+- 조건변수에서 대기하는 함수
+- 내부적으로 세마포어를 생성하여 대기
+- 락을 해제하고 대기한 후, 시그널을 받으면 다시 락을 획득
+- Mesa 스타일 모니터 구현
+*/
 {
 	struct semaphore_elem waiter;
 
@@ -296,20 +301,23 @@ void cond_wait(struct condition *cond, struct lock *lock)
 	ASSERT(lock_held_by_current_thread(lock));
 
 	sema_init(&waiter.semaphore, 0);
-	list_push_back(&cond->waiters, &waiter.elem);
+	// list_push_back(&cond->waiters, &waiter.elem);
+	list_insert_ordered(&cond->waiters, &waiter.elem, sema_compare_priority, 0); // 우선순위에 맞춰서 넣어주기
 	lock_release(lock);
 	sema_down(&waiter.semaphore);
 	lock_acquire(lock);
 }
 
-/* If any threads are waiting on COND (protected by LOCK), then
-	this function signals one of them to wake up from its wait.
-	LOCK must be held before calling this function.
-
-	An interrupt handler cannot acquire a lock, so it does not
-	make sense to try to signal a condition variable within an
-	 interrupt handler. */
+/*
+COND에서 대기 중인 스레드들이 있다면(LOCK으로 보호됨), 이 함수는 그 중 하나에게 대기 상태에서 깨어나라는 신호를 보냅니다.
+이 함수를 호출하기 전에 반드시 LOCK을 보유하고 있어야 합니다. 인터럽트 핸들러는 락을 획득할 수 없으므로, 인터럽트 핸들러 내에서 조건 변수에 신호를 보내려고 하는 것은 의미가 없습니다.
+*/
 void cond_signal(struct condition *cond, struct lock *lock UNUSED)
+/*
+- 대기중인 스레드 하나를 깨우는 함수
+- 모든 스레드가 아닌 단 하나의 스레드만 깨움
+- waiters 리스트에서 하나의 세마포어를 꺼내서 sema_up 호출
+*/
 {
 	ASSERT(cond != NULL);
 	ASSERT(lock != NULL);
@@ -317,22 +325,44 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED)
 	ASSERT(lock_held_by_current_thread(lock));
 
 	if (!list_empty(&cond->waiters))
-		sema_up(&list_entry(list_pop_front(&cond->waiters),
-												struct semaphore_elem, elem)
-								 ->semaphore);
+	{
+		list_sort(&cond->waiters, sema_compare_priority, 0);
+		struct semaphore_elem *seam_elem = list_entry(list_pop_front(&cond->waiters), struct semaphore_elem, elem);
+		sema_up(&seam_elem->semaphore);
+	}
 }
 
-/* Wakes up all threads, if any, waiting on COND (protected by
-	LOCK).  LOCK must be held before calling this function.
-
-	An interrupt handler cannot acquire a lock, so it does not
-	make sense to try to signal a condition variable within an
-	 interrupt handler. */
+/*
+COND에서 대기 중인 모든 스레드들을(LOCK으로 보호됨) 깨웁니다. 이 함수를 호출하기 전에 반드시 LOCK을 보유하고 있어야 합니다.
+인터럽트 핸들러는 락을 획득할 수 없으므로, 인터럽트 핸들러 내에서 조건 변수에 신호를 보내려고 하는 것은 의미가 없습니다.
+*/
 void cond_broadcast(struct condition *cond, struct lock *lock)
+/*
+모든 대기 스레드를 깨우는 함수
+내부적으로 cond_signal을 반복 호출
+*/
 {
 	ASSERT(cond != NULL);
 	ASSERT(lock != NULL);
 
 	while (!list_empty(&cond->waiters))
 		cond_signal(cond, lock);
+}
+
+bool sema_compare_priority(const struct list_elem *new_elem, const struct list_elem *old_elem, void *aux UNUSED)
+{
+
+	struct semaphore_elem *new_seam = list_entry(new_elem, struct semaphore_elem, elem);
+	struct semaphore_elem *old_seam = list_entry(old_elem, struct semaphore_elem, elem);
+
+	struct list *new_list = &(new_seam->semaphore.waiters);
+	struct list *old_list = &(old_seam->semaphore.waiters);
+
+	struct list_elem *new_list_elem = list_begin(new_list);
+	struct list_elem *old_list_elem = list_begin(old_list);
+
+	struct thread *new_thread = list_entry(new_list_elem, struct thread, elem);
+	struct thread *old_thread = list_entry(old_list_elem, struct thread, elem);
+
+	return new_thread->priority > old_thread->priority;
 }

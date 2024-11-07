@@ -20,7 +20,7 @@ enum thread_status {
 
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
-typedef int tid_t;
+typedef int tid_t;  /* 스레드의 식별자(ID) */
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
@@ -89,11 +89,13 @@ struct thread {
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
 	enum thread_status status;          /* Thread state. */
-	char name[16];                      /* Name (for debugging purposes). */
-	int priority;                       /* Priority. */
+	char name[16];                       /* Name (for debugging purposes). */
+	int priority;                       /* Priority. */ /* 스케줄링 시 스레드의 실행 순서 결정하는 데 사용 */
+	int64_t wakeup_tick;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+	/* list_elem이라는 요소 덕에 연결 리스트의 노드로서 쉽게 추가되고 삭제될 수 있다 */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -108,6 +110,12 @@ struct thread {
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
 };
+/*
+	Pintos에서는 스레드 구조체(struct thread)가 TCB 역할을 하며, 각 스레드마다 하나씩 존재한다
+	TCB (Thread Control Block)은 스레드의 메타데이터(상태, 스택 포인터, 레지스터 값 등)를 저장하는 데이터 구조이다
+*/
+
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -142,5 +150,8 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+
+void thread_sleep(int64_t);
+void thread_awake(int64_t);
 
 #endif /* threads/thread.h */

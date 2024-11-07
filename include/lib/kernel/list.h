@@ -85,15 +85,26 @@
 
 /* List element. */
 struct list_elem {
-	struct list_elem *prev;     /* Previous list element. */
-	struct list_elem *next;     /* Next list element. */
+	struct list_elem *prev;     /* Previous list element. 이전 요소를 가리키는 포인터 */
+	struct list_elem *next;     /* Next list element. 다음 요소를 가리키는 포인터 */
 };
+/*
+   이러한 구조 덕분에, 양방향 연결 리스트처럼 동작 가능
+   양방향 연결 리스트는 삽입, 삭제 더 쉽고, 양쪽 방향 탐색 가능한 장점 있음
+*/
 
 /* List. */
 struct list {
 	struct list_elem head;      /* List head. */
 	struct list_elem tail;      /* List tail. */
 };
+/*
+   head와 tail은 실제 데이터를 저장하는 요소가 아니라, 리스트의 양 끝을 표시하기 위해 사용된다
+   => 리스트의 시작과 끝을 관리하기 더 쉬워지고, 리스트가 비어 있는지 여부 체크 간단해진다
+
+   - head와 tail 자체는 유효한 데이터가 아니기 때문에, 보통 리스트의 양 끝을 의미하는 더미 노드로 쓰인다
+     실제 데이터를 가진 요소들은 head와 tail 사이에 연결된다
+*/
 
 /* Converts pointer to list element LIST_ELEM into a pointer to
    the structure that LIST_ELEM is embedded inside.  Supply the

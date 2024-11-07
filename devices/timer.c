@@ -89,13 +89,19 @@ timer_elapsed (int64_t then) {
 
 /* Suspends execution for approximately TICKS timer ticks. */
 void
-timer_sleep (int64_t ticks) {
+timer_sleep (int64_t ticks) {	//ticks : 대기 시간
 	int64_t start = timer_ticks ();
+	thread_sleep(start + ticks);  //이 시간만큼 자야 한다
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	// while (timer_elapsed (start) < ticks)
+		// thread_yield (); /* 현재 스레드가 CPU를 양보하고 ready list에 삽입되도록 함 */
 }
+/*
+	timer_sleep()
+	Call the function that insert thread to the sleep queue.
+*/
+
 
 /* Suspends execution for approximately MS milliseconds. */
 void
@@ -122,11 +128,19 @@ timer_print_stats (void) {
 }
 
 /* Timer interrupt handler. */
+/* 타이머 인터럽트 핸들러.
+   타이머가 틱할 때마다 호출되며, 틱 수를 증가시키고 thread_tick()을 호출 */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
-	ticks++;
-	thread_tick ();
+	ticks++;  //틱 수 증가
+	thread_tick ();  //스레드의 틱 함수 호출
+	thread_awake(ticks);
 }
+/*
+	timer_interrupt()
+	At every tick, check whether some thread must wake up from sleep queue and call wake up function.
+*/
+
 
 /* Returns true if LOOPS iterations waits for more than one timer
    tick, otherwise false. */

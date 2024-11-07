@@ -6,9 +6,13 @@
 
 /* A counting semaphore. */
 struct semaphore {
-	unsigned value;             /* Current value. */
-	struct list waiters;        /* List of waiting threads. */
+	unsigned value;             /* Current value. */ /* 자원의 남은 개수 (양수 혹은 0, 0이면 새로운 스레드는 대기 필요) */
+	struct list waiters;        /* List of waiting threads. 자원 얻기 위해 대기하는 스레드들이 waiters 리스트에 들어감(연결 리스트) */
+								/* 자원이 다시 사용 가능해지면, 대기 중인 스레드 중 하나를 깨워서 자원을 사용할 수 있도록 해야 함 */
 };
+/*
+	semaphore 구조는 스레드들이 공유 자원에 안전하게 접근하도록 동기화 기법을 제공하는 중요한 구조
+*/
 
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);

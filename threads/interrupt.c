@@ -111,6 +111,7 @@ static void pic_end_of_interrupt (int irq);
 void intr_handler (struct intr_frame *args);
 
 /* Returns the current interrupt status. */
+/* 현재 인터럽트의 활성화 상태를 확인하는 함수 */
 enum intr_level
 intr_get_level (void) {
 	uint64_t flags;
@@ -123,6 +124,7 @@ intr_get_level (void) {
 
 	return flags & FLAG_IF ? INTR_ON : INTR_OFF;
 }
+
 
 /* Enables or disables interrupts as specified by LEVEL and
    returns the previous interrupt status. */

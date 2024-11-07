@@ -65,6 +65,7 @@ static void print_stats (void);
 int main (void) NO_RETURN;
 
 /* Pintos main program. */
+/* Pintos 커널의 진입점 */
 int
 main (void) {
 	uint64_t mem_end;
@@ -79,7 +80,7 @@ main (void) {
 
 	/* Initialize ourselves as a thread so we can use locks,
 	   then enable console locking. */
-	thread_init ();
+	thread_init ();  /* thread에 들어가야 하는 여러 정보들 초기화 */
 	console_init ();
 
 	/* Initialize memory system. */
@@ -93,7 +94,7 @@ main (void) {
 #endif
 
 	/* Initialize interrupt handlers. */
-	intr_init ();
+	intr_init (); /* 인터럽트 핸들러 초기화하여, 하드웨어나 소프트웨어 인터럽트를 처리할 수 있도록 설정*/
 	timer_init ();
 	kbd_init ();
 	input_init ();
@@ -102,7 +103,7 @@ main (void) {
 	syscall_init ();
 #endif
 	/* Start thread scheduler and enable interrupts. */
-	thread_start ();
+	thread_start ();  /* idle thread 만들어주며 본격적으로 thread 시작 */
 	serial_init_queue ();
 	timer_calibrate ();
 
@@ -124,7 +125,7 @@ main (void) {
 	/* Finish up. */
 	if (power_off_when_done)
 		power_off ();
-	thread_exit ();
+	thread_exit (); /* 메인 스레드 종료 */
 }
 
 /* Clear BSS */

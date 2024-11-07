@@ -135,19 +135,19 @@ const char *thread_name(void);
 void thread_exit(void) NO_RETURN;
 void thread_yield(void);
 
+void thread_set_priority(int);
+int thread_get_priority(void);
+
+void thread_set_nice(int);
+int thread_get_nice(void);
+int thread_get_load_avg(void);
+int thread_get_recent_cpu(void);
+
 // 새로운 함수 정의
 void thread_sleep(int64_t ticks);
 void thread_awake(int64_t ticks);
 bool thread_compare_priority(struct list_elem *new_elem, struct list_elem *old_elem, void *aux UNUSED);
-void thread_test_preemption(void);
-
-int thread_get_priority(void);
-void thread_set_priority(int);
-
-int thread_get_nice(void);
-void thread_set_nice(int);
-int thread_get_recent_cpu(void);
-int thread_get_load_avg(void);
+void thread_test_max_priority(void);
 
 void do_iret(struct intr_frame *tf);
 

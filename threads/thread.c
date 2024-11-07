@@ -228,7 +228,7 @@ tid_t thread_create(const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock(t);
-	thread_test_preemption();
+	thread_test_max_priority();
 	return tid;
 }
 
@@ -358,7 +358,7 @@ void thread_set_priority(int new_priority)
 */
 {
 	thread_current()->priority = new_priority;
-	thread_test_preemption();
+	thread_test_max_priority();
 }
 
 /* Returns the current thread's priority. */
@@ -467,8 +467,9 @@ bool thread_compare_priority(struct list_elem *new_elem, struct list_elem *old_e
 
 /*
 running thread(현재 동작하는 쓰레드)와 ready_list 의 가장 앞의 쓰레드의 priority(우선순위)를 비교
+현재 동작하는 쓰레드의 우선순위가 더 낮으면 양보하기
 */
-void thread_test_preemption(void)
+void thread_test_max_priority(void)
 {
 	// ready_list가 비어있으면 선점 검사할 필요 없음
 	if (list_empty(&ready_list))

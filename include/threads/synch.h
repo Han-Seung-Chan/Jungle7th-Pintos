@@ -42,8 +42,7 @@ void cond_signal(struct condition *, struct lock *);
 void cond_broadcast(struct condition *, struct lock *);
 
 // 새로운 함수
-bool sema_compare_priority(const struct list_elem *new_elem, const struct list_elem *old_elem, void *aux);
-
+bool sema_compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
 /* Optimization barrier.
  *
  * The compiler will not reorder operations across an

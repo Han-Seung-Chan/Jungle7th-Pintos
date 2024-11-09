@@ -270,7 +270,6 @@ void thread_unblock(struct thread *t)
 
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
-	// list_push_back(&ready_list, &t->elem); // ready_list 에 스레드 추가
 	list_insert_ordered(&ready_list, &t->elem, thread_compare_priority, 0);
 	t->status = THREAD_READY;
 	intr_set_level(old_level);
@@ -344,7 +343,6 @@ void thread_yield(void)
 
 	old_level = intr_disable();
 	if (cur != idle_thread)
-		// list_push_back(&ready_list, &cur->elem); // ready_list 에 스레드 추가
 		list_insert_ordered(&ready_list, &cur->elem, thread_compare_priority, 0);
 
 	do_schedule(THREAD_READY);
@@ -357,7 +355,9 @@ void thread_set_priority(int new_priority)
 - 현재 쓰레드의 우선순위 변경
 */
 {
-	thread_current()->priority = new_priority;
+	struct thread *cur = thread_current();
+	cur->init_priority = new_priority;
+	refresh_priority();
 	thread_test_max_priority();
 }
 
@@ -454,15 +454,15 @@ void thread_awake(int64_t ticks)
 내림차순으로 정렬
 새로운 쓰레드의 우선순위가 ready_list에 있는 리스트의 쓰레드 priority(우선순위)보다 높으면 삽입
  */
-bool thread_compare_priority(struct list_elem *new_elem, struct list_elem *old_elem, void *aux UNUSED)
+bool thread_compare_priority(struct list_elem *a, struct list_elem *b, void *aux UNUSED)
 {
-	struct thread *new_thread = list_entry(new_elem, struct thread, elem);
-	struct thread *old_thread = list_entry(old_elem, struct thread, elem);
+	struct thread *ta = list_entry(a, struct thread, elem);
+	struct thread *tb = list_entry(b, struct thread, elem);
 
-	if (new_thread == NULL || old_thread == NULL)
+	if (list_empty(ta) || list_empty(tb))
 		return false;
 
-	return new_thread->priority > old_thread->priority;
+	return ta->priority > tb->priority;
 }
 
 /*
@@ -477,10 +477,60 @@ void thread_test_max_priority(void)
 
 	// 현재 실행중인 스레드와 ready_list의 최상위 스레드의 우선순위 비교를 위한 변수
 	struct thread *cur = thread_current();
-	struct thread *highest_ready = list_entry(list_front(&ready_list), struct thread, elem);
+	struct thread *ready_front = list_entry(list_front(&ready_list), struct thread, elem);
 
-	if (cur->priority < highest_ready->priority)
+	if (cur->priority < ready_front->priority)
 		thread_yield();
+}
+
+void donate_priority()
+{
+	struct thread *t = thread_current();
+	int priority = t->priority;
+
+	for (int depth = 0; depth < 8; depth++)
+	{
+		if (t->wait_on_lock == NULL)
+			break;
+
+		t = t->wait_on_lock->holder;
+
+		t->priority = priority;
+	}
+}
+
+void remove_with_lock(struct lock *lock)
+{
+	struct thread *t = thread_current();
+	struct list_elem *cur = list_begin(&t->donations);
+	struct thread *cur_thread = NULL;
+
+	while (cur != list_end(&t->donations))
+	{
+		cur_thread = list_entry(cur, struct thread, donation_elem);
+
+		if (cur_thread->wait_on_lock == lock)
+			list_remove(&cur_thread->donation_elem);
+
+		cur = list_next(cur);
+	}
+}
+
+void refresh_priority(void)
+{
+	struct thread *t = thread_current();
+	t->priority = t->init_priority;
+
+	if (list_empty(&t->donations))
+		return;
+
+	list_sort(&t->donations, thread_compare_priority, NULL);
+
+	struct list_elem *max_elem = list_front(&t->donations);
+	struct thread *max_thread = list_entry(max_elem, struct thread, donation_elem);
+
+	if (t->priority < max_thread->priority)
+		t->priority = max_thread->priority;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -492,8 +542,7 @@ void thread_test_max_priority(void)
 	blocks.  After that, the idle thread never appears in the
 	ready list.  It is returned by next_thread_to_run() as a
 	 special case when the ready list is empty. */
-static void
-idle(void *idle_started_ UNUSED)
+static void idle(void *idle_started_ UNUSED)
 {
 	struct semaphore *idle_started = idle_started_;
 
@@ -552,6 +601,10 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+
+	t->init_priority = priority;
+	t->wait_on_lock = NULL;
+	list_init(&t->donations);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

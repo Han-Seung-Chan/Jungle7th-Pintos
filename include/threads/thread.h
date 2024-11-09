@@ -92,7 +92,14 @@ struct thread
 	enum thread_status status; /* Thread state. */
 	char name[16];						 /* Name (for debugging purposes). */
 	int priority;							 /* Priority. */
-	int64_t wakeup;						 // 깨어나야 하는 ticks 값
+
+	int64_t wakeup; // 깨어나야 하는 ticks 값
+
+	int init_priority; // 스레드가 priority 를 양도받았다가 다시 반납할 때 원래의 priority 를 복원할 수 있도록 고유의 priority 값을 저장하는 변수
+
+	struct lock *wait_on_lock;			// 스레드가 현재 얻기 위해 기다리고 있는 lock 으로 스레드는 이 lock 이 release 되기를 기다린다
+	struct list donations;					// 자신에게 priority를 나누어준 스레드들의 리스트
+	struct list_elem donation_elem; // donations 리스트를 관리하기 위한 element로 thread 구조체의 그냥 elem 과 구분하여 사용하기 위한 변수
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; /* List element. */
@@ -143,12 +150,16 @@ int thread_get_nice(void);
 int thread_get_load_avg(void);
 int thread_get_recent_cpu(void);
 
+void do_iret(struct intr_frame *tf);
+
 // 새로운 함수 정의
 void thread_sleep(int64_t ticks);
 void thread_awake(int64_t ticks);
-bool thread_compare_priority(struct list_elem *new_elem, struct list_elem *old_elem, void *aux UNUSED);
+
+bool thread_compare_priority(struct list_elem *a, struct list_elem *b, void *aux UNUSED);
 void thread_test_max_priority(void);
 
-void do_iret(struct intr_frame *tf);
-
+void donate_priority(void);
+void remove_with_lock(struct lock *lock);
+void refresh_priority(void);
 #endif /* threads/thread.h */

@@ -95,7 +95,6 @@ void timer_sleep(int64_t ticks)
 {
 	int64_t start = timer_ticks();
 	thread_sleep(start + ticks);
-	// 질문 start + ticks 은 뭘까?
 }
 
 /* Suspends execution for approximately MS milliseconds. */

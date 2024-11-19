@@ -475,12 +475,16 @@ void thread_test_max_priority(void)
 	if (list_empty(&ready_list))
 		return;
 
-	// 현재 실행중인 스레드와 ready_list의 최상위 스레드의 우선순위 비교를 위한 변수
-	struct thread *cur = thread_current();
-	struct thread *ready_front = list_entry(list_front(&ready_list), struct thread, elem);
+	struct thread *th = list_entry(list_front(&ready_list), struct thread, elem);
 
-	if (cur->priority < ready_front->priority)
-		thread_yield();
+	if (thread_current()->priority < th->priority)
+	{
+
+		if (intr_context()) // Panic 방지
+			intr_yield_on_return();
+		else
+			thread_yield();
+	}
 }
 
 void donate_priority()
